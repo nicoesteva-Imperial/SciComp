@@ -1,0 +1,11 @@
+# Lecture slides and coursework brief (not part of the submission)
+*.pdf
+# but keep generated figures in results/
+!results/*.pdf
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+
+# Large simulation outputs (>10MB) – add specific files here if needed
