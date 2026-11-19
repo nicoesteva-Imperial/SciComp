@@ -54,16 +54,16 @@ deterministic_simulation <- function(initial_state,projection_matrix,simulation_
 #   probs - numeric vector: probability of each (non-death) outcome; should sum to <= 1
 # Returns: integer vector, same length as probs, with the number of individuals
 #   assigned to each outcome (the dead are dropped)
-# NOTE: if sum(probs) > 1 it only prints a warning, then rmultinom() errors on the
-#   negative death probability. n = 11 draws 11 samples but only the first is used
-#   (n = 1 would be enough).
+# FIXED (17/11): originally only printed a warning when sum(probs) > 1 (rmultinom
+#   then failed on the negative death probability) -> now stops with a clear error.
+#   Originally drew n = 11 samples and used only the first -> now n = 1.
 multinomial <- function(pool, probs) {
   if (sum(probs) > 1) { # check probability
-    print("Sum of probabilities is greater than 1")
+    stop("Sum of probabilities is greater than 1")
   }
   death = 1 - sum(probs) # death prob
   probd = c(probs, death) # merge them
-  x = as.vector(rmultinom(n=11, pool, probd)) # sample
+  x = as.vector(rmultinom(n=1, pool, probd)) # sample
   return(x[1:length(probs)])
 }
 
@@ -79,15 +79,15 @@ multinomial <- function(pool, probs) {
 #   growth_matrix - square matrix: survival/maturation probabilities only (no
 #                   reproduction); column i = where individuals in stage i go next
 # Returns: integer vector: individuals per life stage after survival and maturation
-# NOTE: calls sum_vect(), which is not defined anywhere in this file, so this
-#   function currently errors. new_state + individuals_count would do the same job.
+# FIXED (17/11): originally called sum_vect(), which was not defined anywhere, so
+#   the stochastic model crashed -> replaced with element-wise vector addition.
 survival_maturation <- function(state,growth_matrix){
   new_state <- rep(0, length(state)) # 1. new population state
   for (i in 1:length(state)){
     current_individuals <- state[i] # 2.1 individuals in life stage i
     transition_probs <- growth_matrix[,i] # 2.2 initialise probabilities from matrix
     individuals_count <- multinomial(current_individuals, transition_probs) # 2.2 individuals that remain in stage i
-    new_state <- sum_vect(new_state, individuals_count)
+    new_state <- new_state + individuals_count # add these individuals to the new state
   }
   return(new_state) # 3. return new_state
 }
@@ -193,8 +193,8 @@ stochastic_step <- function(state,growth_matrix,reproduction_matrix,clutch_distr
 #   simulation_length   - integer: number of time steps to simulate
 # Returns: numeric vector of length simulation_length + 1 with the total population
 #   size at times 0, 1, ..., simulation_length (0 after extinction)
-# NOTE: the final if-block does nothing (population_size is always full length and
-#   the line inside doesn't assign anything); it is safe to remove.
+# FIXED (17/11): removed a final if-block that did nothing (population_size is
+#   always full length and the line inside didn't assign anything).
 stochastic_simulation <- function(initial_state,growth_matrix,reproduction_matrix,clutch_distribution,simulation_length){
   population_size <- numeric(simulation_length + 1) # population of length sim + 1
   population_size[1] = sum(initial_state) # first value sum of initial state
@@ -205,10 +205,6 @@ stochastic_simulation <- function(initial_state,growth_matrix,reproduction_matri
     population_size[i + 1] = sum(new_state) # update population time series
     if (sum(new_state) == 0){break} # stop if the population is zero
     initial_state = new_state # update for next iter
-  }
-
-  if (length(population_size) < simulation_length + 1){ # fill remaining entries with 0
-    population_size[(length(population_size) + 1):(simulation_length + 1)]
   }
 
   return(population_size)
