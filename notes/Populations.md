@@ -323,4 +323,266 @@ $$
     - 1 or 2 → die (return to bag); 3–6 survive → 4/6
 - Same *average* behaviour as the deterministic matrix, but now outcomes are whole numbers, vary between runs, and the population **can actually go extinct**
 
-*To be continued in part 2…*
+---
+---
+
+# Lecture 3 – Populations (second part)
+
+## Lecture outline
+1. Making a deterministic matrix model stochastic: survival & maturation, recruitment, applying processes in turn
+2. The resulting stochastic demographic model: pros and cons
+3. Eigenvectors and eigenvalues, why they give the long-term behaviour
+4. Real-world examples: bog turtle, Chinese mitten crab, Atlantic salmon
+
+> **Coursework link:** sections 1–2 are *exactly* how the provided `code/Demographic.R` works (Part 1). See also [Part1_Demographic_model.md](Part1_Demographic_model.md).
+
+---
+
+# 1. Making a deterministic model stochastic
+
+Example matrix used throughout (3 stages; column = from, row = to):
+
+$$
+P = \begin{pmatrix} 0.1 & 0 & 3.5 \\ 0.5 & 0.4 & 0 \\ 0 & 0.3 & 0.6 \end{pmatrix}
+$$
+
+- Survival/maturation probabilities: every entry except the 3.5
+- Recruitment rate: 3.5 = mean offspring per adult per time step (top-right)
+
+## Survival and maturation
+
+### What the deterministic model says (expectation)
+Suppose there are **10 individuals in stage 2**. Column 2 of the matrix tells us that at the next time step **we expect**:
+- a proportion **0.4** to still be in stage 2 → **4 stay**
+- a proportion **0.3** to have matured into stage 3 → **3 mature**
+- the remaining proportion **0.3** (= 1 − 0.4 − 0.3) to have died → **3 die**
+
+### What the stochastic model does (probability)
+Instead of exact proportions, we consider the **probability** of each of the three events (stay, mature, die) for **every individual**:
+
+$$P(\text{stay in stage 2}) = 0.4 \qquad P(\text{mature into stage 3}) = 0.3 \qquad P(\text{die}) = 0.3$$
+
+So with 10 individuals in stage 2 we draw the outcomes from a **multinomial distribution**:
+
+$$(N_\text{stay},\ N_\text{mature},\ N_\text{die}) \sim \text{Multinomial}(n = 10,\ p = (0.4, 0.3, 0.3))$$
+
+- The three counts always add up to 10 (every individual has exactly one fate)
+- On average we get (4, 3, 3), but we could get e.g. (5, 1, 4) or (2, 4, 4)
+- **Compare with stochastic population growth (Lecture 2):** each bacterium reproduces with probability 0.1, so $n_{t+1} = n_t + \text{Binomial}(n = n_t,\ p = 0.1)$
+    - Binomial = **2** possible outcomes per individual (reproduce or not)
+    - Multinomial = **more than 2** outcomes per individual (stay / mature / die). The binomial is the special case with 2 outcomes.
+
+### Applying it to all life stages
+Do the same draw for **each stage**, using that stage's **column**, then add the results into the right **rows** of the new state vector:
+
+| Stage (column) | Probabilities used | Example draw | Goes into |
+|---|---|---|---|
+| Stage 1 | stay 0.1, mature 0.5 (die 0.4) | $N_\text{stay} = 5$, $N_\text{mature} = 27$ | 5 → stage 1, 27 → stage 2 |
+| Stage 2 | stay 0.4, mature 0.3 (die 0.3) | $N_\text{stay} = 10$, $N_\text{mature} = 8$ | 10 → stage 2, 8 → stage 3 |
+| Stage 3 | stay (survive) 0.6 (die 0.4), **cannot mature** | $N_\text{stay} = 14$ | 14 → stage 3 |
+
+$$
+n_{t+1} \text{ (before recruitment)} = \begin{pmatrix} 5 \\ 27 + 10 \\ 8 + 14 \end{pmatrix} = \begin{pmatrix} 5 \\ 37 \\ 22 \end{pmatrix}
+$$
+
+- This **doesn't include recruitment yet**: the 3.5 was ignored because it is not survival or maturation
+- In the code: `survival_maturation()` loops over stages, calls `multinomial()` on each column and adds the results (`new_state + individuals_count`)
+
+## Recruitment
+
+### What the deterministic model says
+Suppose there are **5 individuals in stage 3** (adults). The matrix says we **expect** each to produce **3.5** new offspring (in stage 1):
+
+$$5 \times 3.5 = 17.5 \text{ offspring}$$
+
+### The problem
+In a stochastic model we need two separate things:
+1. the **probability that a given adult recruits** (reproduces or not), and
+2. the **probability distribution of clutch/litter size** (how many offspring when it does)
+
+But the matrix has **conflated** them into one number, 3.5, the **recruitment rate**. We need to know them **separately**, so we need **extra data**.
+
+### The fix: use a clutch-size distribution from field studies
+Suppose field studies give the clutch size distribution (sizes 1 to 9):
+
+$$(0.06,\ 0.08,\ 0.13,\ 0.15,\ 0.16,\ 0.18,\ 0.15,\ 0.06,\ 0.03)$$
+
+(This is the same distribution as the coursework's default `clutch_distribution`.)
+
+1. **Expected clutch size** (the mean of the distribution):
+$$E(\text{clutch size}) = \sum_n n \, P(\text{clutch size} = n)$$
+   - For this distribution: $1(0.06) + 2(0.08) + \dots + 9(0.03) = 4.89$
+2. **Individual recruitment probability**:
+$$P(\text{recruit}) = \frac{3.5}{E(\text{clutch size})}$$
+   - Chosen so that $P(\text{recruit}) \times E(\text{clutch size}) = 3.5$, so the stochastic model has the **same average** as the deterministic one
+   - Must be ≤ 1, otherwise the parameters are inconsistent
+   - (With 3.5 and 4.89 this gives 0.716. For the coursework, 2.6/4.89 = 0.532.)
+
+### Worked example (from the slides)
+Suppose $E(\text{clutch size}) = 7$, so $P(\text{recruit}) = 3.5 / 7 = 0.5$.
+1. Draw the **number of adults that recruit**: $N_\text{recruit} \sim \text{Bin}(n = 5,\ p = 0.5)$ → suppose $N_\text{recruit} = 2$
+2. For **each** recruiting adult, draw a clutch size from the distribution → suppose **9** and **4**
+3. Total offspring = 9 + 4 = **13** (the deterministic model says 17.5; on average they agree)
+
+In the code, `stochastic_recruitment()` computes $P(\text{recruit})$ and `offspring_calc()` does steps 1–3 (`rbinom` + `random_draw` per clutch).
+
+## Applying processes in turn
+- **Challenge:** in a stochastic simulation the processes must be applied **one by one**. This feels counterintuitive, because in the deterministic model everything happens **at the same time** (one matrix multiplication).
+- The trick is that both processes are computed from the **current** population:
+
+```
+                    current population
+                    /                \
+  offspring produced by          current population after
+  CURRENT population       +     survival & maturation applied     =   new population
+  (recruitment)                  (multinomial per stage)
+```
+
+- Recruitment uses the adults at the **start** of the step (even those that die during the step still breed), which matches the deterministic $P\,n_t$
+- In the code: `stochastic_step()` calls `survival_maturation(state, …)` and `offspring_calc(state, …)` on the **same** `state`, then adds the offspring to stage 1
+
+---
+
+# 2. The resulting model: a stochastic demographic population model
+
+- **Stochastic** because processes are drawn from random distributions
+- **Demographic** because the population is structured by life stage (a demographic trait)
+
+| Pros | Cons |
+|---|---|
+| In general a **better reflection of reality** than the deterministic model (as long as we run it many times to observe outcomes) | Needs to be **run many times** to see a representative sample of outcomes (hence HPC) |
+| We can observe **random extinction**: the population can reach zero, so we can compute **extinction probability** | **More awkward to code** than the deterministic matrix model |
+| | Requires **additional data** to simulate correctly (the clutch size distribution) |
+
+> Coursework Part 1: panel a = deterministic vs stochastic runs; panel b = extinction probability from many runs on the HPC. Both follow from this pros/cons table.
+
+---
+
+# 3. Eigenvectors and eigenvalues, revisited
+
+## Recap: salmon toy model
+Stages: eggs, juveniles, adults.
+
+$$
+A = \begin{pmatrix} 0.2 & 0 & 10 \\ 0.2 & 0.3 & 0 \\ 0 & 0.1 & 0.4 \end{pmatrix}
+\qquad
+v = \begin{pmatrix} 0 \\ 0 \\ 100 \end{pmatrix}
+\qquad
+Av = \begin{pmatrix} 1000 \\ 0 \\ 40 \end{pmatrix}
+\qquad
+A^2 v = \begin{pmatrix} 600 \\ 200 \\ 16 \end{pmatrix}
+$$
+
+- After $t$ time steps the state is $A^t v$
+
+## Definition
+
+$$A v = \lambda v$$
+
+- $A$ = the **matrix**, $v$ = an **eigenvector**, $\lambda$ = its **eigenvalue** (a single number)
+- Multiplying an eigenvector by the matrix gives back the **same vector, just scaled** by $\lambda$
+
+## Why this matters for populations
+If the population **starts** as an eigenvector $v$:
+
+| Time step | State | Simplifies to |
+|---|---|---|
+| 1 | $v$ | $= v$ |
+| 2 | $Av$ | $= \lambda v$ |
+| 3 | $A \lambda v$ | $= \lambda A v = \lambda^2 v$ |
+| 4 | $A \lambda^2 v$ | $= \lambda^2 A v = \lambda^3 v$ |
+| 5 | $A \lambda^3 v$ | $= \lambda^3 A v = \lambda^4 v$ |
+
+- The **proportions in each stage never change**; the whole population is just multiplied by $\lambda$ every step
+- $\lambda > 1$: grows, $\lambda = 1$: stable, $\lambda < 1$: shrinks
+
+## Any starting population
+A 3-stage matrix has **3 eigenvectors**, each with its own eigenvalue:
+
+$$A v_1 = \lambda_1 v_1 \qquad A v_2 = \lambda_2 v_2 \qquad A v_3 = \lambda_3 v_3$$
+
+**Any** starting state $v$ can be written as a mix of them:
+
+$$v = x v_1 + y v_2 + z v_3$$
+
+Apply the matrix (it can be applied to each part separately):
+
+$$
+\begin{aligned}
+Av &= A(x v_1 + y v_2 + z v_3) \\
+   &= x A v_1 + y A v_2 + z A v_3 \\
+   &= x \lambda_1 v_1 + y \lambda_2 v_2 + z \lambda_3 v_3
+\end{aligned}
+$$
+
+and after $t$ steps:
+
+$$A^t v = x \lambda_1^{\,t} v_1 + y \lambda_2^{\,t} v_2 + z \lambda_3^{\,t} v_3$$
+
+**Key consequence:** raising to the power $t$ makes the term with the **largest** eigenvalue ($\lambda_1$, the *dominant* eigenvalue) grow fastest, so for large $t$ it **swamps** the others:
+
+$$A^t v \approx x \lambda_1^{\,t} v_1$$
+
+- $\lambda_1$ = **long-term growth rate** of the population
+- $v_1$ = **stable stage distribution** (long-term proportions in each stage)
+- The other terms explain the **transient** behaviour at the start (e.g. the early dip in the coursework model before adults are replaced)
+- Coursework default matrix: $\lambda_1 \approx 1.039$, so ≈ 3.9 % growth per month in the long run (`eigen(projection_matrix)`)
+
+---
+
+# 4. Matrix population models in the real world
+
+## Why use them?
+- They model **population dynamics** (hard to observe) from **individual-level processes** (easier to observe: who survives, who matures, how many offspring)
+- Parameters can be inferred from field studies such as **capture–mark–recapture**
+- **Online databases of matrices** give field-based evidence for many populations:
+    - **COMPADRE** (plants): v6.22.5.0, 760 species, 643 publications, 8851 matrix models
+    - **COMADRE** (animals): v4.21.8.0, 415 species, 395 publications, 3317 matrix models
+
+## Example 1: Bog turtle (*Glyptemys muhlenbergii*) conservation, USA
+*Knoerr et al. (2022), Population models reveal the importance of early life-stages for population stability of an imperiled turtle species, Animal Conservation 25: 53–64. https://doi.org/10.1111/acv.12718*
+
+$$
+A = \begin{pmatrix} 0 & 0 & F_3 \\ P_{21} & P_{22} & 0 \\ 0 & P_{32} & P_{33} \end{pmatrix}
+\qquad
+F_3 = (\text{avg. clutch size}) \times (\text{avg. clutch frequency}) \times (\text{adult survival}) \times 0.5
+$$
+
+- 3-stage model; $P_{ij}$ = survival/transition probabilities, $F_3$ = adult fecundity
+- The 0.5 counts only female offspring (a female-only model)
+- Like the 3.5 in the lecture, $F_3$ combines several processes into **one rate**
+- They compared **λ at different sites** under management scenarios: site-specific egg survival, regional average egg survival, caged nests, artificial incubation with immediate release, and **head-starting**
+- Most sites have λ < 1 (declining). Protecting **early life stages** (especially head-starting) pushes λ up, above 1 at several sites
+- Lesson: λ is used as a single summary of whether a population will grow or decline, and to **rank conservation actions**
+
+## Example 2: Invasive Chinese mitten crab control, North America & Europe
+*Zhang, Yokota & Strüssmann (2019), A periodic matrix population model to predict growth potential of the invasive Chinese mitten crab Eriocheir sinensis, J. Crustac. Biol. 39(1): 28–35. https://doi.org/10.1093/jcbiol/ruy090*
+
+- **Periodic** matrix model: separate **summer** and **winter** matrices, applied alternately (seasonal life cycle)
+- Stages: juvenile (larvae), small, mid-size, large
+- Simulated removal (harvesting) from year 20:
+    - **S2** = proportion of mid-size crabs removed during summer
+    - **W3** = proportion of large crabs removed before reproduction in winter
+- With low removal the population keeps growing exponentially. Higher S2 and W3 make it **decline**.
+- Lesson: the model can find **how much control effort** is needed to stop an invasion
+
+## Example 3: Atlantic salmon thermal niche modelling
+*Morris, Bárðarson, González-Ferreras, Lauridsen, Pawar, Rosindell & Woodward, Climatic limits to Atlantic salmon population fitness at continental scales (bioRxiv preprint).*
+
+- A **MIPM** (metabolic integral projection model): like a matrix model, but the population is structured by **continuous body mass** instead of discrete stages
+- **Temperature** (daily thermal regime, including seasonal fluctuations) drives **growth**, **survival** and **fecundity**, which depend on body mass
+- Output: $r_\text{max}$ (population growth potential) vs temperature, for different **resource levels**
+    - Hump-shaped: an optimum temperature (~15 °C), with fitness falling at higher temperatures
+    - Less food (25 % or 50 % reduction) gives lower $r_\text{max}$ and a narrower thermal niche
+    - **Fluctuating** temperatures (dashed) do worse than constant mean temperatures (solid), especially when warm
+- Lesson: individual physiology can be scaled up to population fitness, which allows **predictions under climate change**
+
+---
+
+# Summary
+- Stochastic version of a matrix population model:
+    - survival/maturation: **multinomial** draw per stage
+    - recruitment: **binomial** number of breeders × random clutch sizes
+    - both computed from the current population, then combined
+- Eigenvectors and eigenvalues: the dominant eigenvalue = long-term growth rate, its eigenvector = stable stage distribution
+- Real-world uses: conservation (bog turtle), invasive species control (mitten crab), climate change (salmon)

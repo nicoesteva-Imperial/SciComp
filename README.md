@@ -73,3 +73,71 @@ Entries are added in chronological order and pushed immediately; earlier entries
 - Extinction probability will decrease as initial population size increases (highest for 3, close to 0 for 100).
 
 **AI use.** I used Claude Code to turn the lecture slides into structured notes, explain eigenvalues/eigenvectors with a worked example, add documentation comments to each function in `Demographic.R`, and help spot bugs in the code. I checked its worked examples by running them in R. I want to write the fixes and tests myself with AI help, rather than having it write them for me.
+
+### 2026-11-19 15:14 – Bug fixes, default parameters and unit tests for Part 1
+
+**What I did since the last entry.** Lectures on 18/11 (applications of matrix models, neutral theory) and today (applications of neutral theory); lecture notes in `notes/Populations.md` and `notes/Communities.md`. For Part 1 I fixed the bugs listed on 17/11, added a parameters file and wrote unit tests. I also wrote study notes on how the model works (`notes/Part1_Demographic_model.md`, with figures made by `notes/images/make_part1_figures.R`).
+
+**Bug fixes in `code/Demographic.R`.**
+- `multinomial()` now calls `stop()` if the probabilities sum to more than 1 (it used to print a warning and carry on).
+- `rmultinom(n = 11, ...)` changed to `n = 1`, because only the first draw was used.
+- `survival_maturation()`: replaced the undefined `sum_vect()` with `new_state <- new_state + individuals_count`. The stochastic model no longer crashes.
+- Removed the `if` block at the end of `stochastic_simulation()`, which did nothing.
+
+**Default parameters (`code/demographic_parameters.R`).** These aren't in the 2026 brief or slides. I took them from the 2024 HPC worksheet in the MulQuaBio MQB repo (`content/hpc/instructions/2024_11_16_HPC_worksheet.ipynb`), which matches the provided code. **Still to confirm with the lecturer.**
+- Growth matrix (columns = from, rows = to):
+  - stage 1: stay 0.1, move on 0.5
+  - stage 2: stay 0.4, move on 0.4
+  - stage 3: stay 0.7, move on 0.25
+  - adults: stay 0.4
+
+  Death is 1 − column sum: 0.4, 0.2, 0.05 and 0.6. The worksheet's printed matrix says 0.2 at [4,3], but its R code uses 0.25. I used 0.25.
+- Reproduction matrix: 2.6 babies per adult per month (entry [1,4]).
+- Projection matrix = growth + reproduction. Its dominant eigenvalue is ≈ 1.039, so the deterministic population should grow by about 3.9% a month in the long run.
+- Clutch distribution for sizes 1–9: 0.06, 0.08, 0.13, 0.15, 0.16, 0.18, 0.15, 0.06, 0.03. The mean clutch is 4.89, so in the stochastic model each adult breeds with probability 2.6 / 4.89 ≈ 0.532.
+- `state_initialise_adult(num_stages, initial_size)` puts all individuals in the adult stage, as Part 1 requires.
+
+**Tests (`code/test_demographic.R`, testthat).** Each test has a comment saying what it checks and why. The model is random, so the tests check things that must always hold, reproducibility with a fixed seed, and that averages match the deterministic model:
+1. Parameters are valid: growth matrix columns sum to ≤ 1, the clutch distribution sums to 1, and the recruitment probability is ≤ 1.
+2. `state_initialise_adult(4, 100)` gives (0, 0, 0, 100).
+3. One deterministic step from 100 adults gives (260, 0, 0, 40), matching the hand calculation.
+4. A 24-step deterministic run returns 25 values, starting at 100, with 300 at time 1.
+5. `multinomial()` gives whole, non-negative numbers that never add up to more than the pool, over 200 runs. It also handles a pool of 0 and probabilities (1, 0), and errors when the probabilities sum to more than 1.
+6. `survival_maturation()` never creates individuals: total ≤ 40 when starting from 10 per stage, over 200 runs.
+7. `random_draw()` only returns clutch sizes 1–9.
+8. The same seed gives identical stochastic runs. This matters for HPC seeds.
+9. Extinction is permanent: once a run hits 0 it stays at 0 (100 runs from 3 adults).
+10. The mean of 2000 stochastic runs is within 5% of the deterministic run, for 5 months from 100 adults.
+
+Output of `Rscript code/test_demographic.R` (run from the project root), all 10 tests passing:
+```
+Test passed with 3 successes 😸.
+Test passed with 2 successes 🌈.
+Test passed with 1 success 🥳.
+Test passed with 3 successes 🎉.
+Test passed with 603 successes 🥇.
+Test passed with 400 successes 😀.
+Test passed with 1 success 🥇.
+Test passed with 2 successes 🎉.
+Test passed with 38 successes 🌈.
+Test passed with 1 success 🌈.
+```
+The success counts are the number of `expect_*()` checks inside each test. For example, test 5 is 3 checks × 200 runs plus 3 special cases = 603. Test 9 has a variable count because it only checks runs that went extinct: 38 of the 100 runs from 3 adults did.
+
+**Quick check run.** From 100 adults over 24 months (seed 1):
+- deterministic: 100, 300, 276, 230, 195, … 449, 466
+- stochastic: 100, 295, 264, 204, 178, … 294, 350
+
+Both have the same shape: a jump as the adults breed, a dip as the babies die and the adults age out, then growth. The stochastic run wanders around the deterministic one, as predicted on 17/11.
+
+**Problem.** Running `source("code/test_demographic.R")` in RStudio first failed with `cannot open file 'code/Demographic.R'`, because RStudio's working directory wasn't the project root. I added `SCSE.Rproj` so that opening the project in RStudio sets the working directory to the root. This is what the brief requires anyway.
+
+**Change to the plan.** I'm about a day behind: panel a was planned for 18/11. Fixing the bugs, finding the parameters and understanding the model properly took longer than expected. Next: write the panel a script (local), then the panel b HPC script, testing it locally before submitting. The predictions from 17/11 still stand.
+
+**AI use.** I used Claude Code to:
+- find the 2024 parameters in the MQB repo and explain where 4.89 and the 53% come from
+- help write the fixes and the tests, and add a "what/why" comment to each test
+- explain the stochastic model with worked examples and figures
+- turn lecture slides 3–5 into notes
+
+I ran the tests and the example simulations myself to check the results. Useful prompts: "explain each test as a comment as it comes"; "where is the 53% coming from?".
