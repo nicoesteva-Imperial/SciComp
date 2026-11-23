@@ -104,6 +104,53 @@ Rscript code/part1_panel_b.R                # → results/part1_panel_b.pdf + _s
 
 `afterok` means that if **any** of the 20 jobs fails, the combine job never starts and no half-finished result appears. It stays in `qstat` with status `H`; delete it with `qdel <ID>`, fix the problem and resubmit.
 
+### What runs in parallel, and how the next job knows when to start
+
+There are **20 jobs**, not 40. The 40 is the number of simulations *inside* each job.
+
+```
+ PARALLEL: 20 jobs on different compute nodes, all at the same time
+ ┌─────────────────────────────────────────────────────────────────┐
+ │ job 1  (seed 1):  40 sims × 4 sizes, one after another  ~19 s   │
+ │ job 2  (seed 2):  40 sims × 4 sizes, one after another  ~19 s   │
+ │  ...                                                            │
+ │ job 20 (seed 20): 40 sims × 4 sizes, one after another  ~19 s   │
+ └─────────────────────────────────────────────────────────────────┘
+   Within one job: 160 simulations run one after another.
+   Across jobs:    all 20 run at once.   Total = 20 × 40 = 800 per size.
+```
+
+The automated version **doesn't change this**. It only adds a **21st job at the end** that waits for the 20:
+
+```
+ time ──────────────────────────────────────────────────────────────►
+
+ job 1   [Q]───[ R R R R ]──X
+ job 2   [Q]──[ R R R R ]──X
+ job 3   [Q]─────[ R R R R ]──X         ← parallel, as before
+  ...
+ job 20  [Q]───[ R R R R ]──X
+                              │  PBS sees: all 20 finished with exit status 0
+                              ▼
+ combine [H  H  H  H  H  H  H ]──[ R ]──X     ← starts only now
+          held (waiting)          pools the 20 files → figure
+```
+
+How PBS knows:
+1. `part1_submit.sh` submits the 20-job array first. PBS replies with its ID, for example `3055970[]`.
+2. It then submits the combine job with `-W depend=afterok:3055970[]`: "don't start until that job has finished OK".
+3. PBS holds the combine job (`H` in `qstat`). **PBS does the watching**; no script of yours sits waiting or uses resources.
+4. When the last of the 20 ends, PBS checks every exit status. If all are OK, the combine job is released and runs. If any failed, it never runs.
+
+Manual vs automated:
+```
+ MANUAL (what was done on 23/11):  20 parallel jobs → I check qstat → I run panel_b.R on the laptop
+ AUTOMATED:                        20 parallel jobs → PBS checks    → combine job runs panel_b.R on the HPC
+```
+The simulations are identical either way; the only difference is **who notices they've finished and runs the next step**.
+
+You don't need to rerun Part 1 with `part1_submit.sh`, because the same seeds would give identical results. It's there as the template for Part 3. The real `afterok` dependency hasn't been tested on the cluster yet (only a dry run with a fake `qsub` on the laptop).
+
 ---
 
 ## 0b. Making it reproducible
@@ -479,10 +526,28 @@ Then check on the laptop: `ls ~/Documents/SCSE/results/part1_hpc` should list 20
 
 ---
 
-## 8. Still to do
+## 8. Status and still to do (23/11/2026)
 
-1. Check that all 20 jobs succeeded: `ls results/part1_hpc/` (20 files) and `cat part1_hpc.e*` (empty).
-2. Bring the results to the laptop (section 6).
-3. On the laptop, in RStudio with `SCSE.Rproj` open: `source("code/part1_panel_b.R")` → `results/part1_panel_b.pdf`.
-4. Make sure the `.o`/`.e` files and results are committed (the brief requires the `.o`/`.e` files).
-5. Diary entry: HPC run, job ID 3055970, 20 jobs, any problems.
+### Done
+| What | Where |
+|---|---|
+| 20 HPC jobs (job 3055970), all `.e` files empty, about 19 s each | `results/part1_hpc/` |
+| Results and logs pushed to GitHub, logs tidied into `logs/` | commits `650d24d`, `9234d96` |
+| Panel b: 325, 50, 1 and 0 extinct out of 800 for sizes 3, 10, 30 and 100 | `results/part1_panel_b_summary.rda` |
+| Combined two-panel figure, with titles and a/b labels | `results/part1_figure.pdf` (`code/part1_figure.R`) |
+| Shared plot functions | `code/part1_plot_functions.R` |
+| One-command laptop rebuild | `code/part1_run_all.R` |
+| Automated HPC pipeline (dry-run tested only) | `code/part1_submit.sh`, `code/part1_combine.sh` |
+| Reproducibility check: job 7 rerun on the laptop gave an identical `extinct` table | — |
+
+### Still to do
+1. **Commit and push the new files** (laptop):
+   ```bash
+   cd ~/Documents/SCSE
+   git add code/ notes/Part1_HPC_workflow.md results/
+   git commit -m "Part 1: combined figure, run-all script, automated HPC submit/combine"
+   git push
+   ```
+2. **Diary entry**: the HPC run (job 3055970, 20 × 40), the results, the problems hit (section 7), the reproducibility check and AI use.
+3. **Report**: the 100-word caption and the 150-word explanation. If the titles are removed, the caption should say "800 simulations per size, error bars = exact 95% binomial CI".
+4. **Optional**: test `bash code/part1_submit.sh` once on the HPC to check that `afterok` works before relying on it for Part 3.
