@@ -8,6 +8,26 @@ Coursework repository for the 2026 Scientific Computing in Ecology & Evolution m
 - `sandbox/` – scratch/testing area
 - `notes/` – lecture notes
 
+## Part 1 code at a glance
+Full description of every script and output: [`code/Part1_README.md`](code/Part1_README.md). HPC how-to: [`notes/Part1_HPC_workflow.md`](notes/Part1_HPC_workflow.md).
+
+**Rebuild the Part 1 figure** (laptop, from the project root): `Rscript code/part1_run_all.R` → `results/part1_figure.pdf`
+
+| Script | What it does |
+|---|---|
+| `code/Demographic.R` | Deterministic and stochastic model functions (provided, bugs fixed) |
+| `code/demographic_parameters.R` | Default matrices, clutch distribution, `state_initialise_adult()` |
+| `code/test_demographic.R` | 10 unit tests for the model |
+| `code/part1_panel_a.R` | Panel a: 24-month runs from 100 and 10 adults → `results/part1_panel_a.rda` |
+| `code/part1_submit.sh` | HPC: submits the 20 simulation jobs + the combine job (`bash`, on the HPC) |
+| `code/part1_hpc.sh` | PBS array job script (20 jobs) |
+| `code/part1_hpc.R` | One HPC job: seed = job number, 40 sims × 4 sizes × 120 months → `results/part1_hpc/part1_hpc_<i>.rda` |
+| `code/part1_combine.sh` | PBS job run after all 20 succeed: tidies logs, runs panel b and the figure |
+| `code/part1_panel_b.R` | Pools the 20 HPC files → P(extinction) + 95% CI → `results/part1_panel_b_summary.rda` |
+| `code/part1_plot_functions.R` | Shared plotting functions for panels a and b |
+| `code/part1_figure.R` | Final two-panel figure → `results/part1_figure.pdf` |
+| `code/part1_run_all.R` | Runs panel a → panel b → figure in order (laptop) |
+
 ## Coursework overview
 | Part | Task | Report | HPC? |
 |---|---|---|---|
@@ -141,3 +161,48 @@ Both have the same shape: a jump as the adults breed, a dip as the babies die an
 - turn lecture slides 3–5 into notes
 
 I ran the tests and the example simulations myself to check the results. Useful prompts: "explain each test as a comment as it comes"; "where is the 53% coming from?".
+
+### 2026-11-23 15:34 – Part 1 panel a, HPC run and final figure
+
+**What I did since the last entry.** On 19/11 I wrote and tested the panel a script (`code/part1_panel_a.R`) and the panel b HPC scripts (`code/part1_hpc.sh`, `code/part1_hpc.R`), plus the script that analyses their output (`code/part1_panel_b.R`). I tested them locally first: with no `PBS_ARRAY_INDEX` set, `part1_hpc.R` runs as job 1 and saves to `sandbox/part1_hpc_test/`, so test output never mixes with real results. Today (23/11) I ran the simulations on the Imperial HPC (CX3), analysed them and made the final two-panel figure.
+
+**Panel a.** 24 months from 100 adults (red) and 10 adults (blue): one deterministic run (solid) and 5 stochastic runs (dashed) for each, seed 2026, log y axis. As predicted on 17/11, the stochastic runs scatter around the deterministic line, with much more relative spread from 10 adults. One run from 10 adults fell to a single individual by month 24.
+
+**HPC run (job 3055970).**
+- Array job of 20 jobs (`#PBS -J 1-20`). Each job uses its job number as its seed and runs 40 simulations × 4 initial sizes (3, 10, 30, 100 adults) × 120 months, so there are 800 simulations per size in total.
+- All 20 `.e` files are empty, and each job took 13–25 s.
+- The `.o`/`.e` files are in `results/part1_hpc/logs/`, and the raw results are in `results/part1_hpc/part1_hpc_<i>.rda`.
+
+**Panel b results** (P(extinction) after 120 months, exact 95% binomial CI):
+
+| Initial adults | Extinct / 800 | P(extinction) | 95% CI |
+|---|---|---|---|
+| 3 | 325 | 0.406 | 0.372–0.441 |
+| 10 | 50 | 0.063 | 0.047–0.082 |
+| 30 | 1 | 0.001 | 0.000–0.007 |
+| 100 | 0 | 0.000 | 0.000–0.005 |
+
+The 17/11 predictions held: extinction risk falls steeply with initial size, it's highest for 3 adults and essentially 0 for 100. Some runs from 10 adults went extinct even though the deterministic model grows (λ ≈ 1.039). Extinction risk drops by roughly an order of magnitude between 3 and 10 adults, which fits demographic stochasticity mattering mainly in small populations.
+
+**Reproducibility check.** I reran job 7 on the laptop (`PBS_ARRAY_INDEX=7`) and compared it with the HPC file. The `extinct` table was identical (`identical()` = TRUE), so the seeds work as intended.
+
+**Final figure.** `code/part1_figure.R` puts panels a and b side by side in `results/part1_figure.pdf`, with bold a/b labels. The plotting functions are now in `code/part1_plot_functions.R`, so the preview PDFs and the final figure are drawn by the same code. I first removed the panel titles, because captions usually do that job in papers, then put them back. I still need to decide on this for the final report. I also widened panel b's x range and tidied the panel a legend, because value labels were being cut off. `code/part1_run_all.R` rebuilds panel a → panel b → figure with one command.
+
+**Automating the HPC side for Part 3.** `code/part1_submit.sh` submits the 20 jobs and then `code/part1_combine.sh` with `qsub -W depend=afterok:<array ID>`. PBS holds the combine job until all 20 jobs have succeeded, then the combine job tidies the logs and makes panel b and the figure. So far this has only been dry-run tested with a fake `qsub` on the laptop. I'll test it for real in Part 3. Every script is described in `code/Part1_README.md`, and the HPC workflow is in `notes/Part1_HPC_workflow.md`.
+
+**Problems.**
+- `part1_panel_b.R` stopped with `No part1_hpc_<i>.rda files found`, because the HPC hadn't run yet. The scripts weren't on GitHub either, because they were never committed.
+- `git clone` on the HPC failed with `Permission denied (publickey)`. The SSH key on my GitHub account was my laptop's. I made a separate key on the HPC with `ssh-keygen` and added it to GitHub.
+- The terminal stopped accepting input after `module avail` (a pager or frozen session). I opened a new terminal and logged in again.
+- Plain `qstat` lists every user's jobs, so I use `qstat -u nee26 -t` instead. I also checked `results/` before any job had finished, so I learned to wait for status `X`.
+- I first ran HPC commands on the laptop by mistake. I now check the prompt before typing.
+
+**Change to the plan.** The HPC submission was planned for Fri 20/11 and happened on Mon 23/11, so I'm about 3 days behind the original plan for Part 1. Part 1 now only needs the caption and the 150 words. Next: Part 2 functions (planned for 24/11).
+
+**AI use.** I used Claude Code to:
+- explain the HPC workflow step by step: SSH keys, git between laptop and HPC, `qsub`/`qstat`, array jobs and `afterok` dependencies
+- debug the problems above
+- combine the panels into one figure and fix the clipped labels
+- write the run-all and submit/combine scripts, the HPC notes and the script overview
+
+I ran every command on the HPC myself and checked the results (`.e` files, the numbers, the rendered figure). Useful prompts: "explain to me how this code is running from top to bottom"; "how does the overall HPC know when the jobs are done?".
