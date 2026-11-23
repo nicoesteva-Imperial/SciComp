@@ -10,6 +10,10 @@
 # results/part1_hpc/part1_hpc_<i>.rda, and the cluster writes one .o (printed
 # output) and one .e (errors) file per job into the submission folder.
 #
+# After ALL jobs have finished, move the .o/.e files next to the results:
+#     mkdir -p results/part1_hpc/logs
+#     mv part1_hpc.[oe]* results/part1_hpc/logs/
+#
 # Resources: one job takes about 20 s locally (160 simulations), so
 # 30 min walltime and 1 GB memory per job are plenty.
 
