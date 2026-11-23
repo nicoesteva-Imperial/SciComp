@@ -18,7 +18,7 @@ plot_panel_a <- function(panel_a, size_colours, simulation_length) {
 
   plot(NA, xlim = c(0, simulation_length), ylim = c(y_min, y_max), log = "y",
        xlab = "Time (months)", ylab = "Total population size (log scale)", las = 1,
-       main = "Deterministic vs stochastic population growth")
+       main = "Deterministic vs stochastic population growth", cex.main = 1.05)
 
   any_extinct <- FALSE
   for (i in seq_along(panel_a)) {
@@ -48,7 +48,8 @@ plot_panel_a <- function(panel_a, size_colours, simulation_length) {
     legend_lty  <- c(legend_lty, NA); legend_lwd <- c(legend_lwd, 2); legend_pch <- c(legend_pch, 4)
   }
   legend("top", legend_text, col = legend_col, lty = legend_lty, lwd = legend_lwd,
-         pch = legend_pch, bty = "n", cex = 0.8, ncol = 2)
+         pch = legend_pch, bty = "n", cex = 0.8, ncol = 2,
+         seg.len = 1.8, x.intersp = 0.6, text.width = 10.5)   # column width in months (x units)
 }
 
 
@@ -56,11 +57,14 @@ plot_panel_a <- function(panel_a, size_colours, simulation_length) {
 # Panel b: probability of extinction vs initial population size
 # ---------------------------------------------------------------------------
 plot_panel_b <- function(panel_b) {
-  plot(panel_b$initial_size, panel_b$p_extinct, log = "x", ylim = c(0, 1),
+  # widen the x range a little (log axis, so multiply) so the value labels
+  # above the first and last points are not cut off by the plot border
+  x_range <- range(panel_b$initial_size) * c(0.75, 1.35)
+  plot(panel_b$initial_size, panel_b$p_extinct, log = "x", ylim = c(0, 1), xlim = x_range,
        xaxt = "n", pch = 19, cex = 1.3, las = 1,
        xlab = "Initial population size (adults, log scale)",
        ylab = "Probability of extinction (after 120 months)",
-       main = "Extinction risk falls with initial population size")
+       main = "Extinction risk falls with initial population size", cex.main = 1.05)
   axis(1, at = panel_b$initial_size)                       # ticks at 3, 10, 30, 100
   arrows(panel_b$initial_size, panel_b$ci_lower, panel_b$initial_size, panel_b$ci_upper,
          angle = 90, code = 3, length = 0.05)               # 95% CI error bars
