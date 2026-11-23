@@ -1,0 +1,7 @@
+Job 20 starting on cx3-1-28 at Mon 23 Nov 14:25:37 GMT 2026
+Job 20 | seed 20 | run time 17.5 s
+Extinctions out of 40 per initial size:
+  3  10  30 100 
+ 16   3   0   0 
+Saved results/part1_hpc/part1_hpc_20.rda 
+Job 20 finished at Mon 23 Nov 14:26:09 GMT 2026

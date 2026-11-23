@@ -1,0 +1,7 @@
+Job 11 starting on cx3-3-21 at Mon 23 Nov 14:25:23 GMT 2026
+Job 11 | seed 11 | run time 16.4 s
+Extinctions out of 40 per initial size:
+  3  10  30 100 
+ 19   3   0   0 
+Saved results/part1_hpc/part1_hpc_11.rda 
+Job 11 finished at Mon 23 Nov 14:25:48 GMT 2026

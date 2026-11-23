@@ -1,0 +1,7 @@
+Job 16 starting on cx3-6-19 at Mon 23 Nov 14:25:46 GMT 2026
+Job 16 | seed 16 | run time 24.9 s
+Extinctions out of 40 per initial size:
+  3  10  30 100 
+ 13   3   0   0 
+Saved results/part1_hpc/part1_hpc_16.rda 
+Job 16 finished at Mon 23 Nov 14:26:13 GMT 2026

@@ -1,0 +1,7 @@
+Job 13 starting on cx3-6-11 at Mon 23 Nov 14:25:22 GMT 2026
+Job 13 | seed 13 | run time 17.5 s
+Extinctions out of 40 per initial size:
+  3  10  30 100 
+ 17   2   0   0 
+Saved results/part1_hpc/part1_hpc_13.rda 
+Job 13 finished at Mon 23 Nov 14:25:44 GMT 2026

@@ -1,0 +1,7 @@
+Job 12 starting on cx3-1-28 at Mon 23 Nov 14:25:20 GMT 2026
+Job 12 | seed 12 | run time 19 s
+Extinctions out of 40 per initial size:
+  3  10  30 100 
+ 16   2   0   0 
+Saved results/part1_hpc/part1_hpc_12.rda 
+Job 12 finished at Mon 23 Nov 14:25:55 GMT 2026
