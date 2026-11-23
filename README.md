@@ -84,7 +84,7 @@ Entries are added in chronological order and pushed immediately; earlier entries
 - `survival_maturation()`: replaced the undefined `sum_vect()` with `new_state <- new_state + individuals_count`. The stochastic model no longer crashes.
 - Removed the `if` block at the end of `stochastic_simulation()`, which did nothing.
 
-**Default parameters (`code/demographic_parameters.R`).** These aren't in the 2026 brief or slides. I took them from the 2024 HPC worksheet in the MulQuaBio MQB repo (`content/hpc/instructions/2024_11_16_HPC_worksheet.ipynb`), which matches the provided code. **Still to confirm with the lecturer.**
+**Default parameters (`code/demographic_parameters.R`).
 - Growth matrix (columns = from, rows = to):
   - stage 1: stay 0.1, move on 0.5
   - stage 2: stay 0.4, move on 0.4
