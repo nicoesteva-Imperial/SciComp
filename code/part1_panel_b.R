@@ -71,25 +71,9 @@ save(panel_b, seeds_used, file = file.path(output_dir, "part1_panel_b_summary.rd
 
 
 # ---------------------------------------------------------------------------
-# Plot (a function, so the final 2-panel figure script can call it too)
+# Plot preview of panel b on its own (plot function shared with part1_figure.R)
 # ---------------------------------------------------------------------------
-plot_panel_b <- function(panel_b) {
-  plot(panel_b$initial_size, panel_b$p_extinct, log = "x", ylim = c(0, 1),
-       xaxt = "n", pch = 19, cex = 1.3, las = 1,
-       xlab = "Initial population size (adults, log scale)",
-       ylab = "Probability of extinction (after 120 months)",
-       main = "Extinction risk falls with initial population size")
-  axis(1, at = panel_b$initial_size)                       # ticks at 3, 10, 30, 100
-  arrows(panel_b$initial_size, panel_b$ci_lower, panel_b$initial_size, panel_b$ci_upper,
-         angle = 90, code = 3, length = 0.05)               # 95% CI error bars
-  lines(panel_b$initial_size, panel_b$p_extinct, lty = 3)
-  text(panel_b$initial_size, panel_b$ci_upper, sprintf("%.3f", panel_b$p_extinct),
-       pos = 3, cex = 0.8)
-  legend("topright", c("proportion of runs extinct", "95% confidence interval"),
-         pch = c(19, NA), lty = c(NA, 1), bty = "n", cex = 0.85)
-  mtext(sprintf("%d stochastic simulations per initial size", panel_b$n_runs[1]),
-        side = 3, line = 0.2, cex = 0.8)
-}
+source("code/part1_plot_functions.R")
 
 pdf(file.path(output_dir, "part1_panel_b.pdf"), width = 7, height = 5)
 plot_panel_b(panel_b)

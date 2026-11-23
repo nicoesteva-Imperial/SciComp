@@ -4,6 +4,178 @@ Notes from 23/11/2026, written down after running the Part 1 panel b simulations
 
 ---
 
+## 0. Quick recipe (read this first)
+
+### The whole loop at a glance
+
+```
+   LAPTOP                        GITHUB                         HPC (CX3)
+   ──────                        ──────                         ─────────
+ ① write + test code
+         │  git push
+         └──────────────────────► repo ──────────────────┐
+                                                         │  git pull
+                                                         ▼
+                                                ② qsub code/part1_hpc.sh
+                                                         │
+                                                         ▼
+                                                ③ 20 jobs run (qstat)
+                                                         │
+                                                         ▼
+                                                ④ tidy logs + git push
+                                  repo ◄─────────────────┘
+         ┌──────────────────────── │
+         │  git pull
+         ▼
+ ⑤ Rscript code/part1_panel_b.R  →  results/part1_panel_b.pdf
+```
+
+### Step by step
+
+**① LAPTOP: test, then push the code**
+```bash
+cd ~/Documents/SCSE
+Rscript code/part1_hpc.R                              # quick local test (→ sandbox/)
+Rscript code/part1_panel_b.R sandbox/part1_hpc_test   # analysis works on the test files?
+git add code/ && git commit -m "..." && git push
+```
+
+**② HPC: log in, update, submit**
+```bash
+ssh nee26@login.cx3.hpc.imperial.ac.uk     # VPN on!  prompt → [nee26@login-x ~]$
+cd ~/SciComp
+git pull                                    # first time ever: git clone git@github.com:nicoesteva-Imperial/SciComp.git
+qsub code/part1_hpc.sh                      # reply: 3055970[].pbs-8
+```
+
+**③ HPC: wait for the jobs**
+```bash
+qstat -u nee26 -t                           # Q = queued, R = running, X = done
+```
+```
+   Q Q Q Q ...  →  R R R R ...  →  X X X X ...  →  (list empty) = all done
+```
+
+**④ HPC: check, tidy, push the results**
+```bash
+ls results/part1_hpc/ | wc -l               # should say 20
+cat part1_hpc.e*                            # should print nothing
+mkdir -p results/part1_hpc/logs && mv part1_hpc.[oe]* results/part1_hpc/logs/
+git add results/part1_hpc && git commit -m "Part 1 HPC results (job <ID>)" && git push
+exit                                        # back to the laptop
+```
+
+**⑤ LAPTOP: pull and make the figure**
+```bash
+cd ~/Documents/SCSE
+git pull
+Rscript code/part1_panel_b.R                # → results/part1_panel_b.pdf + _summary.rda
+```
+
+> **Always check the prompt before typing.**
+> `nicolas-esteva@...EliteBook` = laptop · `[nee26@login-b ...]$` = HPC
+
+### The automated version (steps ②–④ and ⑤ in one command each)
+
+```
+ HPC:     bash code/part1_submit.sh
+            ├─ qsub part1_hpc.sh ─────────► 20 jobs   [1] [2] ... [20]
+            │                                            │ all exit OK?
+            └─ qsub -W depend=afterok ────► part1_combine.sh  (status H = held until then)
+                                              ├─ move .o/.e → results/part1_hpc/logs/
+                                              ├─ Rscript code/part1_panel_b.R
+                                              └─ Rscript code/part1_figure.R
+          then: git add results/ && git commit -m "Part 1 HPC results (job <ID>)" && git push
+
+ LAPTOP:  git pull
+          Rscript code/part1_run_all.R
+            ├─ check results/part1_hpc/ has 20 files
+            ├─ part1_panel_a.R   (panel a is always made locally, as the brief says)
+            ├─ part1_panel_b.R
+            └─ part1_figure.R  → results/part1_figure.pdf
+```
+
+| File | Runs on | Job |
+|---|---|---|
+| `code/part1_submit.sh` | HPC login node (`bash`, not `qsub`) | Submits the array job, then the combine job with `afterok` |
+| `code/part1_hpc.sh` + `part1_hpc.R` | HPC compute nodes (×20) | Simulations |
+| `code/part1_combine.sh` | HPC compute node (×1) | Tidies the logs, runs panel b and the figure, **only if all 20 jobs succeeded** |
+| `code/part1_run_all.R` | Laptop | Rebuilds panel a, panel b and the figure, in that order |
+
+`afterok` means that if **any** of the 20 jobs fails, the combine job never starts and no half-finished result appears. It stays in `qstat` with status `H`; delete it with `qdel <ID>`, fix the problem and resubmit.
+
+---
+
+## 0b. Making it reproducible
+
+"Reproducible" means that someone else (or you, in a month) can get **exactly the same numbers** from the same code. Here's what makes that true in this project, and what to keep doing.
+
+### What's already built in
+
+```
+ same code        +   same seeds          +   same parameters          =  same results
+ (git commit)         (seed = job 1..20)      (demographic_parameters.R)
+     │                     │                        │
+     ▼                     ▼                        ▼
+  git log shows       part1_hpc.R:            one file, sourced
+  which version       set.seed(PBS_ARRAY_INDEX)  by every script
+  ran                 → job 7 always gives
+                        the same part1_hpc_7.rda
+```
+
+| Ingredient | Where | Why it matters |
+|---|---|---|
+| **Fixed seeds** | `part1_hpc.R`: `seed <- job_index` | Job *i* always uses seed *i*, so rerunning any job gives an identical `.rda`. Different seeds mean the 20 jobs are independent |
+| **Parameters in one file** | `code/demographic_parameters.R` | Every script uses the same matrices. Change them in one place only |
+| **Relative paths** | `code/...`, `results/...` | Works on any computer, provided you run from the project root (`SCSE.Rproj` in RStudio, `cd ~/SciComp` on the HPC) |
+| **Code under git** | GitHub | The commit hash records exactly which code produced the results |
+| **Raw results kept** | `results/part1_hpc/*.rda` | The figure can be remade without the HPC |
+| **Logs kept** | `results/part1_hpc/logs/` | Proof of what ran, where, when and how long it took |
+| **Test output kept apart** | `sandbox/` vs `results/` | Test runs can never be mistaken for real ones |
+
+### Habits to keep each time you run it
+
+1. **Commit before you submit.** Never run on the HPC with unpushed changes. The HPC should only run code that's on GitHub.
+2. **Write the run in the diary**: date, job ID (for example `3055970`), number of jobs, commit hash (`git log --oneline -1` on the HPC), and any problems.
+3. **Commit the results with the job ID** in the message: `"Part 1 HPC results (job 3055970)"`.
+4. **Don't edit raw results by hand.** If something's wrong, fix the code and rerun.
+5. **Clean the HPC copy** before the next `git pull` there (`rm part1_hpc.[oe]*` if any logs are left in the root), so the pull doesn't clash.
+
+### Checking reproducibility yourself
+
+Rerun one job on the laptop and compare its results with the HPC file:
+```bash
+# on the laptop, from ~/Documents/SCSE
+PBS_ARRAY_INDEX=7 Rscript code/part1_hpc.R          # overwrites results/part1_hpc/part1_hpc_7.rda
+```
+```r
+# in R, from the project root
+hpc <- new.env(); local <- new.env()
+system("git show HEAD:results/part1_hpc/part1_hpc_7.rda > /tmp/hpc_7.rda")  # the HPC version from git
+load("/tmp/hpc_7.rda", envir = hpc)
+load("results/part1_hpc/part1_hpc_7.rda", envir = local)
+identical(hpc$extinct, local$extinct)               # TRUE = reproducible
+```
+```bash
+git checkout results/part1_hpc/part1_hpc_7.rda      # put the HPC version back afterwards
+```
+Only compare `extinct`. `run_time` always differs between machines, so the whole file is never byte-for-byte identical.
+
+### Reusing this for another HPC job (for example, Part 3)
+
+Copy the **four** files (`part1_submit.sh`, `part1_hpc.sh`, `part1_hpc.R`, `part1_combine.sh`), plus `part1_run_all.R` for the laptop side, and rename `part1` → `part3` everywhere. In `part3_submit.sh`, change the three names at the top (`array_script`, `combine_script`, `log_dir`). In `part3_combine.sh`, list the analysis scripts to run. The pair of simulation files needs these changes:
+
+```
+code/part1_hpc.sh  →  code/part3_hpc.sh          code/part1_hpc.R  →  code/part3_hpc.R
+  #PBS -N part3_hpc        ← job name               the simulation itself
+  #PBS -J 1-<N>            ← number of jobs          output_dir <- "results/part3_hpc"
+  #PBS -l walltime=...     ← time per job            sandbox dir <- "sandbox/part3_hpc_test"
+  Rscript code/part3_hpc.R ← which script
+```
+Then follow the same five steps (①–⑤), with `part3` in place of `part1`.
+
+---
+
 ## 1. What we did, in one paragraph
 
 Panel b needs **800 stochastic simulations × 4 initial sizes**, run for 120 months each. Rather than run them all on the laptop, the work was split into **20 jobs** (40 simulations per size each) that run **at the same time** on the Imperial HPC. The code was moved from the laptop to the HPC **through GitHub**. The jobs were submitted with `qsub`, and each one saved a small `.rda` file of results. These files are then brought back to the laptop, where `part1_panel_b.R` pools them and draws the plot.
